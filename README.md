@@ -1,2 +1,2 @@
 # the-way-out-fx
-forex trading bot with onanda api
+forex trading bot with mt5 and python
