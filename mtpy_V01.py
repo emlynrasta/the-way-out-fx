@@ -4,34 +4,43 @@ from datetime import datetime
 import time
 
 class Fx_ninja():
-    def __init__(self):
+    def __init__(self, symbol, risk_percent):
         # intitialization of trader, mt5, login , check account balance and set lot size
+        self.symbol = symbol
+        self.risk = risk_percent
         self.run = self.initialize()
-        print('succesfull intialize')
         self.auth = self.login()
-        print('success auth')
+        self.balance = mt5.account_info().balance # get the account balance
+        self.timeframe = mt5.TIMEFRAME_W1
+        # self.data = self.market_data()
+        self.sl_pips = 20
+        self.lotsize = self.lots_clac()
 
     
-    def initialize(self):
+    def initialize(self) -> int:
         if not mt5.initialize(login=8339663, server="FBS-Demo", password="h7oSc3C3"):
             print("initialize() failed, error code =",mt5.last_error())
             quit()
+        else:
+            print('succesfully intialized')
+            return 1
             
-    def login(self):
+    def login(self) -> int:
         authorized=mt5.login(login=8339663, password="h7oSc3C3", server="FBS-Demo") 
         
         if authorized:
-    # display trading account data 'as is'
-            print(mt5.account_info())
-    
-    # display trading account data in the form of a list
-            print("Show account_info()._asdict():")
-            account_info_dict = mt5.account_info()._asdict()
-            for prop in account_info_dict:
-                # print("  {}={}".format(prop, account_info_dict[prop]))
-                pass
-            else:
-                print("failed to connect at account #{}, error code: {}".format(8339663, mt5.last_error()))
+        # make a log of the login
+            print('succesfully authourised')
+        else:
+            print("failed to connect at account #{}, error code: {}".format(8339663, mt5.last_error()))
+            return 1
+                
+        
+    def lots_clac(self) -> float:
+        # calculate the right lotsize that accounts for 1% of the account
+        lots = ((self.risk / 100) * self.balance) / self.sl_pips
+        print(lots)
+        return lots
     
     
 if __name__ == '__main__':
@@ -39,4 +48,4 @@ if __name__ == '__main__':
     login = 8339663
     passwword = 'h7oSc3C3'
     server = "FBS-Demo"
-    Fx_ninja()
+    Fx_ninja('EUR/USD', 1)
