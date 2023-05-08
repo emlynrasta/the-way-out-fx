@@ -16,6 +16,7 @@ class Fx_ninja():
         self.data = self.market_data()
         self.sl_pips = 20
         self.lotsize = self.lots_clac()
+        # self.run = self.run_bot()
 
     
     def initialize(self) -> int:
@@ -43,7 +44,7 @@ class Fx_ninja():
         print(lots)
         return lots
     
-    def market_data(self):
+    def market_data(self) -> pd:
         # setting time zone to utc
         timezone = pytz.timezone("Etc/UTC")
         # create 'datetime' object in UTC time zone to avoid the implementation of a local time zone offset
@@ -53,13 +54,40 @@ class Fx_ninja():
         rates = mt5.copy_rates_from("EURUSD", mt5.TIMEFRAME_H4, utc_from, 10)
         
         df = pd.DataFrame(rates)
-        print(df)
+        # print(df)
         df['time'] = pd.to_datetime(df['time'], unit='s')
         df.set_index('time', inplace=True)
-        print(df)
-   
+        # print(df)
+        return df
+        
+        
     def last_candle(self):
-        pass
+        # this function gets the OHLC data for the most recent candle and adds it to the main dataframe
+        # this function is ment to ru at intervals of time frame eg every after a minute to keep the main dataframe current
+        # setting time zone to utc
+        timezone = pytz.timezone("Etc/UTC")
+        utc_from = datetime(2023, 5, 1, tzinfo=timezone)
+        
+        # get last candle data
+        rates = mt5.copy_rates_from("EURUSD", mt5.TIMEFRAME_H4, utc_from, 1)
+        df = pd.DataFrame(rates)
+        # print(df)
+        df['time'] = pd.to_datetime(df['time'], unit='s')
+        df.set_index('time', inplace=True)
+        # print(df)
+        
+        try:
+            pd.concat([self.data, df]) # concatnate last candle to general dataframe
+            print('data succesfully added')
+        except Exception as err:
+            print('failed to add data')
+        
+        return df
+    
+    def run_bot(self):
+        while True:
+            self.last_candle()
+            time.sleep(60)
    
    
    
