@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime
 import time
 import pytz
+import ta
 
 class Fx_ninja():
     def __init__(self, symbol, risk_percent):
@@ -15,8 +16,12 @@ class Fx_ninja():
         self.timeframe = mt5.TIMEFRAME_M1
         self.data = self.market_data()
         self.sl_pips = 20
+        self.tp_pips = self.sl_pips * 3
         self.lotsize = self.lots_clac()
+        self.ema = self.ema_signal()
+        self.rsi = self.rsi_signal()
         # self.run = self.run_bot()
+        # self.send_order()
 
     
     def initialize(self) -> int:
@@ -48,45 +53,77 @@ class Fx_ninja():
         # setting time zone to utc
         timezone = pytz.timezone("Etc/UTC")
         # create 'datetime' object in UTC time zone to avoid the implementation of a local time zone offset
-        utc_from = datetime(2023, 5, 1, tzinfo=timezone)
+        utc_from = datetime(2023, 5, 15, tzinfo=timezone)
         
         # get 10 EURUSD H4 bars starting from 01.10.2020 in UTC time zone
-        rates = mt5.copy_rates_from("EURUSD", mt5.TIMEFRAME_H4, utc_from, 10)
+        rates = mt5.copy_rates_from("EURUSD", mt5.TIMEFRAME_M1, utc_from, 50)
         
         df = pd.DataFrame(rates)
-        # print(df)
+        # print(df.tail(5))
         df['time'] = pd.to_datetime(df['time'], unit='s')
-        df.set_index('time', inplace=True)
-        # print(df)
+        print(df.tail(1))
         return df
         
+    def ema_signal(self) -> str:
+        print('now in ema') 
+        # calculate the 20 and 200 moving average 
+        ma20 = self.data['close'].ewm(span=20).mean()
+        ma200 = self.data['close'].ewm(span=200).mean()
+        # print(type(ma20))
+        # print(type(ma200))
+    
+        # check if current and 3 previous close prices are either below or above the mas
+        current_above = self.data['close'].iloc[-1] > ma20.iloc[-1] and self.data['close'].iloc[-1] > ma200.iloc[-1]
+        # last_3_above = all(self.data['close'].iloc[-4:-1] > ma20.iloc[-4:-1]) and all(self.data['close'].iloc[-4:-1] > ma200.iloc[-4:-1])
+    
+        current_below = self.data['close'].iloc[-1] < ma20.iloc[-1] and self.data['close'].iloc[-1] < ma200.iloc[-1]
+        #last_3_below = all(self.data['close'].iloc[-4:-1] < ma20.iloc[-4:-1]) and all(self.data['close'].iloc[-4:-1] < ma200.iloc[-4:-1])
+    
+        if current_above:
+            print('buy')
+            return 'buy'
+        elif current_below:
+            print('sell')
+            return 'sell'
+        else:
+            print('null')
+            return ('null')
         
-    def last_candle(self):
-        # this function gets the OHLC data for the most recent candle and adds it to the main dataframe
-        # this function is ment to ru at intervals of time frame eg every after a minute to keep the main dataframe current
-        # setting time zone to utc
-        timezone = pytz.timezone("Etc/UTC")
-        utc_from = datetime(2023, 5, 1, tzinfo=timezone)
+    def rsi_signal(self) -> str:
+        # calculate rsi indicator using ta-lib 
+        self.data['rsi'] = ta.momentum.RSIIndicator(self.data['close'], 20).rsi()
+        # print(self.data)
         
-        # get last candle data
-        rates = mt5.copy_rates_from("EURUSD", mt5.TIMEFRAME_H4, utc_from, 1)
-        df = pd.DataFrame(rates)
-        # print(df)
-        df['time'] = pd.to_datetime(df['time'], unit='s')
-        df.set_index('time', inplace=True)
-        # print(df)
+        # check if current rsi value is above 50, trending up but below 80
+        current_above = self.data['rsi'].iloc[-1] > 50
+        rsi_below = self.data['rsi'].iloc[-1] < 80
+        trending_up = self.data['rsi'].iloc[-1] > self.data['rsi'].iloc[-2]
+    
+        # check if current rsi value is below 40, trending down but aboe 20
+        current_below = self.data['rsi'].iloc[-1] < 50
+        rsi_above = self.data['rsi'].iloc[-1] > 20
+        trending_down = self.data['rsi'].iloc[-1] < self.data['rsi'].iloc[-2]
+    
+        if current_above and rsi_below and trending_up:
+            print('buy')
+            return 'buy'
+        elif current_below and rsi_above and trending_down:
+            print('sell')
+            return 'sell'
+        else:
+            print('null')
+            return 'null'
         
-        try:
-            pd.concat([self.data, df]) # concatnate last candle to general dataframe
-            print('data succesfully added')
-        except Exception as err:
-            print('failed to add data')
-        
-        return df
+    def get_price(self):
+        pass
+    
+    def send_order(self) -> int:
+        pass
     
     def run_bot(self):
         while True:
-            self.last_candle()
+            current_price = self.get_price()
+            print(current_price)
             time.sleep(60)
    
    
@@ -101,4 +138,4 @@ if __name__ == '__main__':
     login = 8339663
     passwword = 'h7oSc3C3'
     server = "FBS-Demo"
-    Fx_ninja('EUR/USD', 1)
+    ninja = Fx_ninja('EUR/USD', 1)
