@@ -13,15 +13,17 @@ class Fx_ninja():
         self.run = self.initialize()
         self.auth = self.login()
         self.balance = mt5.account_info().balance # get the account balance
-        self.timeframe = mt5.TIMEFRAME_M1
+        self.timeframe = mt5.TIMEFRAME_M15
         self.data = self.market_data()
         self.sl_pips = 20
         self.tp_pips = self.sl_pips * 3
         self.lotsize = self.lots_clac()
+        self.get_price()
         self.ema = self.ema_signal()
         self.rsi = self.rsi_signal()
+        # self.adx = self.adx_signal()
         # self.run = self.run_bot()
-        # self.send_order()
+        self.send_order()
 
     
     def initialize(self) -> int:
@@ -40,12 +42,12 @@ class Fx_ninja():
             print('succesfully authourised')
         else:
             print("failed to connect at account #{}, error code: {}".format(8339663, mt5.last_error()))
-            return 1
-                
+            return 1          
         
     def lots_clac(self) -> float:
         # calculate the right lotsize that accounts for 1% of the account
         lots = ((self.risk / 100) * self.balance) / self.sl_pips
+        lots = round(lots, 2)
         print(lots)
         return lots
     
@@ -53,10 +55,11 @@ class Fx_ninja():
         # setting time zone to utc
         timezone = pytz.timezone("Etc/UTC")
         # create 'datetime' object in UTC time zone to avoid the implementation of a local time zone offset
-        utc_from = datetime(2023, 5, 15, tzinfo=timezone)
+        # the date in here should be ahead of the current date
+        utc_from = datetime(2024, 1, 1, tzinfo=timezone)
         
         # get 10 EURUSD H4 bars starting from 01.10.2020 in UTC time zone
-        rates = mt5.copy_rates_from("EURUSD", mt5.TIMEFRAME_M1, utc_from, 50)
+        rates = mt5.copy_rates_from("EURUSD", mt5.TIMEFRAME_M15, utc_from, 50)
         
         df = pd.DataFrame(rates)
         # print(df.tail(5))
@@ -90,6 +93,7 @@ class Fx_ninja():
             return ('null')
         
     def rsi_signal(self) -> str:
+        print('rsi signal')
         # calculate rsi indicator using ta-lib 
         self.data['rsi'] = ta.momentum.RSIIndicator(self.data['close'], 20).rsi()
         # print(self.data)
@@ -114,28 +118,102 @@ class Fx_ninja():
             print('null')
             return 'null'
         
-    def get_price(self):
+    def adx_signal(self) -> str:
+        print('adx signal')
+        self.data['adx'] = ta.trend.ADXIndicator(self.data['high'], self.data['low'], self.data['close'], 20).adx()
+        self.data['adx_pos'] = ta.trend.ADXIndicator(self.data['high'], self.data['low'], self.data['close'], 20).adx_pos()
+        self.data['adx_neg'] = ta.trend.ADXIndicator(self.data['high'], self.data['low'], self.data['close'], 20).adx_neg()
+        
+        print(self.data)
+        # signals
+        # if adx line is above 25
+        adx_above = self.data['adx'].iloc[-1] > 25
+        
+        # if di+ above di-
+        di_plus = self.data['adx_pos'] > self.data['adx_neg']
+        
+        # if di- above di+
+        di_neg = self.data['adx_neg'] > self.data['adx_pos']
+        
+        #di+ trending up
+        if adx_above:
+            if di_plus:
+                print('buy')
+                return 'buy'
+            elif di_neg:
+                print('sell')
+                return 'sell'
+        else:
+            print('null')
+            return 'null'
+        #print(self.data)
+    
+    def trend_confirm(self):
         pass
     
+    def get_price(self):
+        # print(mt5.terminal_info())
+        price = mt5.symbol_info(self.symbol)
+        # print(price)
+        return price
+    
     def send_order(self) -> int:
-        pass
+        # determine the trade type based on the signals
+        if self.ema == 'buy' and self.rsi == 'buy':
+            order_type = mt5.ORDER_TYPE_BUY
+            price = self.get_price().ask
+            sl = price - 50 * mt5.symbol_info(self.symbol).point
+            tp = price + 150 * mt5.symbol_info(self.symbol).point
+        elif self.ema == 'sell' and self.rsi == 'sell':
+            order_type = mt5.ORDER_TYPE_SELL
+            price = self.get_price().bid
+            sl = price + 50 * mt5.symbol_info(self.symbol).point
+            tp = price - 150 * mt5.symbol_info(self.symbol).point
+        else:
+            print(' no trade opportunity')
+            mt5.shutdown()
+            return False
+    
+        #set up trade request
+        request = {
+        "action": mt5.TRADE_ACTION_DEAL,
+        "symbol": self.symbol,
+        "volume": self.lotsize,
+        "type": order_type,
+        "price": price,
+        "sl": sl,
+        "tp": tp,
+        "deviation": 20,
+        "magic": 234000,
+        "comment": "python script open",
+        "type_time": mt5.ORDER_TIME_GTC,
+        "type_filling": mt5.ORDER_FILLING_IOC,
+        }
+        
+        # open trade from request while limiting the number of trades to open
+        if mt5.orders_total() == 0:
+            result = mt5.order_send(request)
+        else:
+            print('too many trades at the moment, try again later')
+            mt5.shutdown()
+            
+        # check if the trade was executed 
+        if result.retcode != mt5.TRADE_RETCODE_DONE:
+            print('order send failed, error code : ', result.comment)    
+            mt5.shutdown()
+            return 0
+        return 1
     
     def run_bot(self):
         while True:
             current_price = self.get_price()
             print(current_price)
             time.sleep(60)
-   
-   
-   
-   
-   
-   
-        
     
+   
 if __name__ == '__main__':
     path ='C:\Program Files\FBS MetaTrader 5\terminal64.exe'
     login = 8339663
     passwword = 'h7oSc3C3'
     server = "FBS-Demo"
-    ninja = Fx_ninja('EUR/USD', 1)
+    ninja = Fx_ninja('EURUSD', 1)
